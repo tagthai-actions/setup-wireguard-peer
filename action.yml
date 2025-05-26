@@ -92,7 +92,7 @@ runs:
       if: steps.gcp-check.outputs.on_gcp == 'false'
       shell: bash
       run: |
-        config_response=$(curl -s -X GET "${{ inputs.api_url }}/api/downloadPeer/${{ inputs.peer_name }}?id=${{ inputs.peer_id }}" \
+        config_response=$(curl -s -X GET "${{ inputs.api_url }}/api/downloadPeer/${{ inputs.wg_config_name }}?id=${{ inputs.peer_id }}" \
           -H "wg-dashboard-apikey: ${{ inputs.api_key }}")
 
         config=$(echo "$config_response" | jq -r '.data.file')
