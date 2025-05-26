@@ -104,6 +104,8 @@ runs:
 
         echo "::add-mask::$config"
         echo "$config" > wg.conf
+        chmod 600 wg.conf
+        echo "✅ WireGuard config file downloaded and saved as wg.conf"
 
         echo "wg_conf<<EOF" >> "$GITHUB_OUTPUT"
         echo "$config" >> "$GITHUB_OUTPUT"
@@ -126,19 +128,19 @@ runs:
         jq -n --arg uuid "$uuid" \
           --arg peer "${{ steps.create-peer.outputs.peer_id_raw }}" \
           --arg expire "$expire_time" \
-          '{
-            Job: {
-              JobID: $uuid,
-              Configuration: "${{ inputs.wg_config_name }}",
-              Peer: $peer,
-              Field: "date",
-              Operator: "lgt",
-              Value: $expire,
-              CreationDate: "",
-              ExpireDate: "",
-              Action: "delete"
-            }
-          }' > delete-scheduler.json
+        '{
+          Job: {
+            JobID: $uuid,
+            Configuration: "${{ inputs.wg_config_name }}",
+            Peer: $peer,
+            Field: "date",
+            Operator: "lgt",
+            Value: $expire,
+            CreationDate: "",
+            ExpireDate: "",
+            Action: "delete"
+          }
+        }' > delete-scheduler.json
 
         curl -s -X POST "${{ inputs.api_url }}/api/savePeerScheduleJob" \
           -H "wg-dashboard-apikey: ${{ inputs.api_key }}" \
@@ -150,7 +152,7 @@ runs:
       shell: bash
       run: |
         sudo wg-quick down ./wg.conf || echo "⚠️ wg down failed"
-        rm -f create-peer.json wg delete-scheduler.json
+        rm -f create-peer.json wg.conf delete-scheduler.json
 
 branding:
   icon: "activity"
