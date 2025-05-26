@@ -1,4 +1,4 @@
-# TAGTHAi Setup Wireguard
+# TAGTHAi Setup Wireguard Peer
 
 A GitHub Composite Action that dynamically provisions a WireGuard peer using an API, connects to the VPN if needed, schedules automatic deletion, and safely cleans up.
 
@@ -18,21 +18,21 @@ Repo: [TAGTHAi/tgth-setup-wireguard](https://github.com/TAGTHAi/tgth-setup-wireg
 
 ## 📥 Inputs
 
-| Name                  | Required | Description                                         |
-|-----------------------|----------|-----------------------------------------------------|
-| `api_url`             | ✅        | Base URL of your WireGuard Dashboard                |
-| `api_token`           | ✅        | API token for accessing the dashboard               |
-| `config_name`         | ❌        | Peer name (default: `gha-${{ github.run_id }}`)     |
-| `delete_after_minutes`| ❌        | Time to auto-delete peer (default: `20`)            |
+| Name                   | Required | Description                                     |
+| ---------------------- | -------- | ----------------------------------------------- |
+| `api_url`              | ✅       | Base URL of your WireGuard Dashboard            |
+| `api_token`            | ✅       | API token for accessing the dashboard           |
+| `config_name`          | ❌       | Peer name (default: `gha-${{ github.run_id }}`) |
+| `delete_after_minutes` | ❌       | Time to auto-delete peer (default: `20`)        |
 
 ---
 
 ## 📤 Outputs
 
-| Name         | Description                                      |
-|--------------|--------------------------------------------------|
-| `public_key` | Public key of the created peer                   |
-| `peer_id`    | Internal ID of the peer                          |
+| Name         | Description                                       |
+| ------------ | ------------------------------------------------- |
+| `public_key` | Public key of the created peer                    |
+| `peer_id`    | Internal ID of the peer                           |
 | `wg_conf`    | WireGuard config file content (`[Interface] ...`) |
 
 ---
@@ -78,10 +78,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup VPN via WireGuard
-        uses: TAGTHAi/tgth-setup-wireguard@v1
+        uses: tagthai-actions/setup-wireguard-peer@v1
         with:
-          api_url: "https://vpn.example.com"
-          api_token: ${{ secrets.WG_API_TOKEN }}
+          api_url: ${{ secrets.WG_API_URL }}
+          api_token: ${{ secrets.WG_API_KEY }}
 
       - name: Access internal GKE service
         run: |
@@ -89,3 +89,4 @@ jobs:
             --region asia-southeast1 --project my-project
 
           kubectl get pods -n default
+```
