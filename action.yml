@@ -1,0 +1,148 @@
+name: "WireGuard Peer Provisioner"
+description: "Create WireGuard peer, connect VPN, schedule auto-deletion, and cleanup"
+inputs:
+  api_url:
+    description: "Base URL of WireGuard Dashboard"
+    required: true
+  api_token:
+    description: "API token for WireGuard Dashboard"
+    required: true
+  wg_config_name:
+    description: "Name of WireGuard config"
+    required: false
+    default: "wg0"
+  peer_name:
+    description: "Name for peer (default uses GitHub run ID)"
+    required: false
+    default: "tgth-github-runner-${{ github.run_id }}"
+  delete_after_minutes:
+    description: "Minutes to auto-delete peer"
+    required: false
+    default: "20"
+
+outputs:
+  public_key:
+    description: "Public key of created peer"
+  peer_id:
+    description: "Peer ID"
+  wg_conf:
+    description: "WireGuard config content"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Check Runner Environment
+      id: gcp-check
+      shell: bash
+      run: |
+        if curl -s -H "Metadata-Flavor: Google" --connect-timeout 1 http://metadata.google.internal/computeMetadata/v1/; then
+          echo "Running on GCP VM"
+          echo "on_gcp=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "Not running on GCP"
+          echo "on_gcp=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Ensure requirements installed
+      shell: bash
+      run: |
+        echo "🔍 Checking required dependencies..."
+
+        check_and_install() {
+          if ! command -v "$1" >/dev/null 2>&1; then
+            echo "⚠️ $1 not found. Installing..."
+            sudo apt update -y
+            sudo apt install -y "$2"
+          else
+            echo "✅ $1 is already installed."
+          fi
+        }
+
+        check_and_install wg-quick wireguard
+        check_and_install jq jq
+        check_and_install curl curl
+        check_and_install uuidgen uuid-runtime
+
+        echo "✅ All required tools are now installed."
+
+    - name: Create WireGuard Peer
+      if: steps.gcp-check.outputs.on_gcp == 'false'
+      shell: bash
+      run: |
+        response=$(curl -s -X POST "${{ inputs.api_url }}/api/addPeers/${{ inputs.wg_config_name }}" \
+          -H "wg-dashboard-apikey: ${{ inputs.api_token }}" \
+          -H "Content-Type: application/json" \
+          -d "{\"name\": \"${{ inputs.peer_name }}\"}")
+
+        echo "$response" > create-peer.json
+
+        if [[ "$(jq -r '.status' create-peer.json)" != "true" ]]; then
+          echo "❌ Failed to create peer:"
+          cat create-peer.json
+          exit 1
+        fi
+
+        export PUBLIC_KEY=$(jq -r '.data[0].configuration.PublicKey' create-peer.json)
+        export PEER_ID=$(jq -r '.data[0].id' create-peer.json)
+
+        echo "public_key=$PUBLIC_KEY" >> "$GITHUB_OUTPUT"
+        echo "peer_id=$PEER_ID" >> "$GITHUB_OUTPUT"
+
+    - name: Fetch WireGuard Config File
+      if: steps.gcp-check.outputs.on_gcp == 'false'
+      shell: bash
+      run: |
+        config_response=$(curl -s -X GET "${{ inputs.api_url }}/api/downloadPeer/${{ inputs.peer_name }}?id=${{ inputs.peer_id }}" \
+          -H "wg-dashboard-apikey: ${{ inputs.api_token }}")
+
+        config=$(echo "$config_response" | jq -r '.data.file')
+
+        echo "::add-mask::$config"
+        echo "$config" > wg.conf
+
+        echo "wg_conf<<EOF" >> "$GITHUB_OUTPUT"
+        echo "$config" >> "$GITHUB_OUTPUT"
+        echo "EOF" >> "$GITHUB_OUTPUT"
+
+    - name: Connect to WireGuard VPN
+      if: steps.gcp-check.outputs.on_gcp == 'false'
+      shell: bash
+      run: |
+        sudo wg-quick up wg.conf
+        echo "✅ WireGuard VPN connected"
+
+    - name: Schedule WireGuard Peer Auto-Deletion
+      if: steps.gcp-check.outputs.on_gcp == 'false'
+      shell: bash
+      run: |
+        expire_time=$(date -u -d "+${{ inputs.delete_after_minutes }} minutes" +"%Y-%m-%d %H:%M:%S")
+        uuid=$(uuidgen)
+
+        jq -n --arg uuid "$uuid" \
+          --arg peer "$PEER_ID" \
+          --arg expire "$expire_time" \
+          '{
+            Job: {
+              JobID: $uuid,
+              Configuration: "${{ inputs.wg_config_name }}",
+              Peer: $peer,
+              Field: "date",
+              Operator: "lgt",
+              Value: $expire,
+              CreationDate: "",
+              ExpireDate: "",
+              Action: "delete"
+            }
+          }' > delete-scheduler.json
+
+        curl -s -X POST "${{ inputs.api_url }}/api/savePeerScheduleJob" \
+          -H "wg-dashboard-apikey: ${{ inputs.api_token }}" \
+          -H "Content-Type: application/json" \
+          --data @delete-scheduler.json
+
+    - name: Cleanup WireGuard VPN (always run)
+      if: always() && steps.gcp-check.outputs.on_gcp == 'false'
+      shell: bash
+      run: |
+        sudo wg-quick down wg.conf || echo "⚠️ wg down failed"
+        rm -f create-peer.json wg.conf delete-scheduler.json
