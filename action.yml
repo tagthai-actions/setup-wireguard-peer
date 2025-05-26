@@ -122,7 +122,6 @@ runs:
       if: steps.gcp-check.outputs.on_gcp == 'false'
       shell: bash
       run: |
-        expire_time=$(date -u -d "+${{ inputs.delete_after_minutes }} minutes" +"%Y-%m-%d %H:%M:%S")
         uuid=$(uuidgen)
         peer_id="${{ steps.create-peer.outputs.peer_id_raw }}"
         config_name="${{ inputs.wg_config_name }}"
@@ -135,13 +134,15 @@ runs:
             "Peer": "$peer_id",
             "Field": "date",
             "Operator": "lgt",
-            "Value": "$expire_time",
+            "Value": "2025-01-01 00:00:00",
             "CreationDate": "",
             "ExpireDate": "",
             "Action": "delete"
           }
         }
         EOF
+
+        cat delete-scheduler.json
 
         curl -s -X POST "${{ inputs.api_url }}/api/savePeerScheduleJob" \
           -H "wg-dashboard-apikey: ${{ inputs.api_key }}" \
