@@ -2,7 +2,7 @@
 
 A GitHub Composite Action that dynamically provisions a WireGuard peer using an API, connects to the VPN if needed, schedules automatic deletion, and safely cleans up.
 
-Repo: [TAGTHAi/tgth-setup-wireguard](https://github.com/TAGTHAi/tgth-setup-wireguard)
+Repo: [tagthai-actions/setup-wireguard-peer](https://github.com/tagthai-actions/setup-wireguard-peer)
 
 ---
 
@@ -21,7 +21,7 @@ Repo: [TAGTHAi/tgth-setup-wireguard](https://github.com/TAGTHAi/tgth-setup-wireg
 | Name                   | Required | Description                                     |
 | ---------------------- | -------- | ----------------------------------------------- |
 | `api_url`              | ✅       | Base URL of your WireGuard Dashboard            |
-| `api_token`            | ✅       | API token for accessing the dashboard           |
+| `api_key`              | ✅       | API key for accessing the dashboard             |
 | `config_name`          | ❌       | Peer name (default: `gha-${{ github.run_id }}`) |
 | `delete_after_minutes` | ❌       | Time to auto-delete peer (default: `20`)        |
 
@@ -81,7 +81,7 @@ jobs:
         uses: tagthai-actions/setup-wireguard-peer@v1
         with:
           api_url: ${{ secrets.WG_API_URL }}
-          api_token: ${{ secrets.WG_API_KEY }}
+          api_key: ${{ secrets.WG_API_KEY }}
 
       - name: Access internal GKE service
         run: |

@@ -4,8 +4,8 @@ inputs:
   api_url:
     description: "Base URL of WireGuard Dashboard"
     required: true
-  api_token:
-    description: "API token for WireGuard Dashboard"
+  api_key:
+    description: "API key for WireGuard Dashboard"
     required: true
   wg_config_name:
     description: "Name of WireGuard config"
@@ -70,7 +70,7 @@ runs:
       shell: bash
       run: |
         response=$(curl -s -X POST "${{ inputs.api_url }}/api/addPeers/${{ inputs.wg_config_name }}" \
-          -H "wg-dashboard-apikey: ${{ inputs.api_token }}" \
+          -H "wg-dashboard-apikey: ${{ inputs.api_key }}" \
           -H "Content-Type: application/json" \
           -d "{\"name\": \"${{ inputs.peer_name }}\"}")
 
@@ -93,7 +93,7 @@ runs:
       shell: bash
       run: |
         config_response=$(curl -s -X GET "${{ inputs.api_url }}/api/downloadPeer/${{ inputs.peer_name }}?id=${{ inputs.peer_id }}" \
-          -H "wg-dashboard-apikey: ${{ inputs.api_token }}")
+          -H "wg-dashboard-apikey: ${{ inputs.api_key }}")
 
         config=$(echo "$config_response" | jq -r '.data.file')
 
@@ -136,7 +136,7 @@ runs:
           }' > delete-scheduler.json
 
         curl -s -X POST "${{ inputs.api_url }}/api/savePeerScheduleJob" \
-          -H "wg-dashboard-apikey: ${{ inputs.api_token }}" \
+          -H "wg-dashboard-apikey: ${{ inputs.api_key }}" \
           -H "Content-Type: application/json" \
           --data @delete-scheduler.json
 
