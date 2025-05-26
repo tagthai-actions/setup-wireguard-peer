@@ -103,7 +103,7 @@ runs:
         config=$(echo "$config_response" | jq -r '.data.file')
 
         echo "::add-mask::$config"
-        echo "$config" > wg
+        echo "$config" > wg.conf
 
         echo "wg_conf<<EOF" >> "$GITHUB_OUTPUT"
         echo "$config" >> "$GITHUB_OUTPUT"
@@ -113,7 +113,7 @@ runs:
       if: steps.gcp-check.outputs.on_gcp == 'false'
       shell: bash
       run: |
-        sudo wg-quick up wg
+        sudo wg-quick up ./wg.conf
         echo "✅ WireGuard VPN connected"
 
     - name: Schedule WireGuard Peer Auto-Deletion
@@ -149,7 +149,7 @@ runs:
       if: always() && steps.gcp-check.outputs.on_gcp == 'false'
       shell: bash
       run: |
-        sudo wg-quick down wg || echo "⚠️ wg down failed"
+        sudo wg-quick down ./wg.conf || echo "⚠️ wg down failed"
         rm -f create-peer.json wg delete-scheduler.json
 
 branding:
