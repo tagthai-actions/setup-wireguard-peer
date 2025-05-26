@@ -23,8 +23,10 @@ inputs:
 outputs:
   public_key:
     description: "Public key of created peer"
-  peer_id:
-    description: "Peer ID"
+  peer_id_raw:
+    description: "Unencoded peer ID"
+  peer_id_encode:
+    description: "URL-encoded peer ID"
   wg_conf:
     description: "WireGuard config content"
 
@@ -66,6 +68,7 @@ runs:
         echo "✅ All required tools are now installed."
 
     - name: Create WireGuard Peer
+      id: create-peer
       if: steps.gcp-check.outputs.on_gcp == 'false'
       shell: bash
       run: |
@@ -82,23 +85,25 @@ runs:
           exit 1
         fi
 
-        export PUBLIC_KEY=$(jq -r '.data[0].configuration.PublicKey' create-peer.json)
-        export PEER_ID=$(jq -r '.data[0].id' create-peer.json)
+        PUBLIC_KEY=$(jq -r '.data[0].configuration.PublicKey' create-peer.json)
+        PEER_ID_RAW=$(jq -r '.data[0].id' create-peer.json)
+        PEER_ID_ENCODE=$(python3 -c "import urllib.parse; print(urllib.parse.quote('''$PEER_ID_RAW'''))")
 
         echo "public_key=$PUBLIC_KEY" >> "$GITHUB_OUTPUT"
-        echo "peer_id=$PEER_ID" >> "$GITHUB_OUTPUT"
+        echo "peer_id_raw=$PEER_ID_RAW" >> "$GITHUB_OUTPUT"
+        echo "peer_id_encode=$PEER_ID_ENCODE" >> "$GITHUB_OUTPUT"
 
     - name: Fetch WireGuard Config File
       if: steps.gcp-check.outputs.on_gcp == 'false'
       shell: bash
       run: |
-        config_response=$(curl -s -X GET "${{ inputs.api_url }}/api/downloadPeer/${{ inputs.wg_config_name }}?id=${{ inputs.peer_id }}" \
+        config_response=$(curl -s -X GET "${{ inputs.api_url }}/api/downloadPeer/${{ inputs.wg_config_name }}?id=${{ steps.create-peer.outputs.peer_id_encode }}" \
           -H "wg-dashboard-apikey: ${{ inputs.api_key }}")
 
         config=$(echo "$config_response" | jq -r '.data.file')
 
         echo "::add-mask::$config"
-        echo "$config" > wg.conf
+        echo "$config" > wg
 
         echo "wg_conf<<EOF" >> "$GITHUB_OUTPUT"
         echo "$config" >> "$GITHUB_OUTPUT"
@@ -108,7 +113,7 @@ runs:
       if: steps.gcp-check.outputs.on_gcp == 'false'
       shell: bash
       run: |
-        sudo wg-quick up wg.conf
+        sudo wg-quick up wg
         echo "✅ WireGuard VPN connected"
 
     - name: Schedule WireGuard Peer Auto-Deletion
@@ -119,7 +124,7 @@ runs:
         uuid=$(uuidgen)
 
         jq -n --arg uuid "$uuid" \
-          --arg peer "$PEER_ID" \
+          --arg peer "${{ steps.create-peer.outputs.peer_id_raw }}" \
           --arg expire "$expire_time" \
           '{
             Job: {
@@ -144,8 +149,8 @@ runs:
       if: always() && steps.gcp-check.outputs.on_gcp == 'false'
       shell: bash
       run: |
-        sudo wg-quick down wg.conf || echo "⚠️ wg down failed"
-        rm -f create-peer.json wg.conf delete-scheduler.json
+        sudo wg-quick down wg || echo "⚠️ wg down failed"
+        rm -f create-peer.json wg delete-scheduler.json
 
 branding:
   icon: "activity"
