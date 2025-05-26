@@ -118,43 +118,11 @@ runs:
         sudo wg-quick up ./wg.conf
         echo "✅ WireGuard VPN connected"
 
-    - name: Schedule WireGuard Peer Auto-Deletion
-      if: steps.gcp-check.outputs.on_gcp == 'false'
-      shell: bash
-      run: |
-        uuid=$(uuidgen)
-        peer_id="${{ steps.create-peer.outputs.peer_id_raw }}"
-        config_name="${{ inputs.wg_config_name }}"
-
-        cat > delete-scheduler.json <<EOF
-        {
-          "Job": {
-            "JobID": "$uuid",
-            "Configuration": "$config_name",
-            "Peer": "$peer_id",
-            "Field": "date",
-            "Operator": "lgt",
-            "Value": "2025-01-01 00:00:00",
-            "CreationDate": "",
-            "ExpireDate": "",
-            "Action": "delete"
-          }
-        }
-        EOF
-
-        cat delete-scheduler.json
-
-        curl -s -X POST "${{ inputs.api_url }}/api/savePeerScheduleJob" \
-          -H "wg-dashboard-apikey: ${{ inputs.api_key }}" \
-          -H "Content-Type: application/json" \
-          --data @delete-scheduler.json
-
     - name: Cleanup WireGuard VPN (always run)
       if: always() && steps.gcp-check.outputs.on_gcp == 'false'
       shell: bash
       run: |
         sudo wg-quick down ./wg.conf || echo "⚠️ wg down failed"
-        rm -f create-peer.json wg.conf delete-scheduler.json
 
 branding:
   icon: "activity"
