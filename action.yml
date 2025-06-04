@@ -2,33 +2,21 @@ name: "WireGuard Peer Provisioner"
 description: "Create WireGuard peer, connect VPN, schedule auto-deletion, and cleanup"
 inputs:
   api_url:
-    description: "Base URL of WireGuard Dashboard"
+    description: "Base URL of TGTH WireGuard API Client"
     required: true
   api_key:
-    description: "API key for WireGuard Dashboard"
+    description: "API key for TGTH WireGuard API Client"
     required: true
-  wg_config_name:
-    description: "Name of WireGuard config"
-    required: false
-    default: "wg0"
   peer_name:
     description: "Name for peer (default uses GitHub run ID)"
     required: false
     default: "tgth-github-runner-${{ github.run_id }}"
-  delete_after_minutes:
-    description: "Minutes to auto-delete peer"
-    required: false
-    default: "20"
 
 outputs:
-  public_key:
-    description: "Public key of created peer"
-  peer_id_raw:
-    description: "Unencoded peer ID"
-  peer_id_encode:
-    description: "URL-encoded peer ID"
-  wg_conf:
-    description: "WireGuard config content"
+  peer_id:
+    description: "Peer ID of created peer"
+  wg_conf_path:
+    description: "Path to WireGuard config file"
 
 runs:
   using: "composite"
@@ -72,44 +60,20 @@ runs:
       if: steps.gcp-check.outputs.on_gcp == 'false'
       shell: bash
       run: |
-        response=$(curl -s -X POST "${{ inputs.api_url }}/api/addPeers/${{ inputs.wg_config_name }}" \
-          -H "wg-dashboard-apikey: ${{ inputs.api_key }}" \
+        response=$(curl -s -X POST "${{ inputs.api_url }}/peers/full" \
+          -H "tgth-api-key: ${{ inputs.api_key }}" \
           -H "Content-Type: application/json" \
           -d "{\"name\": \"${{ inputs.peer_name }}\"}")
 
         echo "$response" > create-peer.json
 
-        if [[ "$(jq -r '.status' create-peer.json)" != "true" ]]; then
-          echo "❌ Failed to create peer:"
-          cat create-peer.json
-          exit 1
-        fi
+        # Extract peer_id and config from the response
+        peer_id=$(echo "$response" | jq -r '.peer_id')
+        config=$(echo "$response" | jq -r '.config')
 
-        PUBLIC_KEY=$(jq -r '.data[0].configuration.PublicKey' create-peer.json)
-        PEER_ID_RAW=$(jq -r '.data[0].id' create-peer.json)
-        PEER_ID_ENCODE=$(python3 -c "import urllib.parse; print(urllib.parse.quote('''$PEER_ID_RAW'''))")
-
-        echo "public_key=$PUBLIC_KEY" >> "$GITHUB_OUTPUT"
-        echo "peer_id_raw=$PEER_ID_RAW" >> "$GITHUB_OUTPUT"
-        echo "peer_id_encode=$PEER_ID_ENCODE" >> "$GITHUB_OUTPUT"
-
-    - name: Fetch WireGuard Config File
-      if: steps.gcp-check.outputs.on_gcp == 'false'
-      shell: bash
-      run: |
-        config_response=$(curl -s -X GET "${{ inputs.api_url }}/api/downloadPeer/${{ inputs.wg_config_name }}?id=${{ steps.create-peer.outputs.peer_id_encode }}" \
-          -H "wg-dashboard-apikey: ${{ inputs.api_key }}")
-
-        config=$(echo "$config_response" | jq -r '.data.file')
-
-        echo "::add-mask::$config"
+        # Create wg.conf file
         echo "$config" > wg.conf
-        chmod 600 wg.conf
-        echo "✅ WireGuard config file downloaded and saved as wg.conf"
-
-        echo "wg_conf<<EOF" >> "$GITHUB_OUTPUT"
-        echo "$config" >> "$GITHUB_OUTPUT"
-        echo "EOF" >> "$GITHUB_OUTPUT"
+        echo "✅ WireGuard configuration file created with peer ID: $peer_id"
 
     - name: Connect to WireGuard VPN
       if: steps.gcp-check.outputs.on_gcp == 'false'
